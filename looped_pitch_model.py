@@ -4,14 +4,14 @@ LoopPitch: a weight-tied looped relational transformer for pass valuation.
 One forward pass returns, per loop t = 1..T, two logits for the query (target) token:
     [:, t, 0] -> pass success   P(success | state, target)
     [:, t, 1] -> shot in 10 s   Q(shot | state, target, completed)
+With halting (M6) a third channel [:, t, 2] holds the halting logit lambda_t.
 
 Token layout per sample (length L = 2 + N_MAX):
     0      context token   (match context, no pitch position)
     1      query token     (the pass target location: actual or hypothetical)
     2..    player tokens   (visible players from the 360 freeze-frame, padded)
 
-NOTE: written against the design doc spec; run the smoke test at the bottom
-(python looped_pitch_model.py) before training.
+Smoke test: python looped_pitch_model.py
 """
 from __future__ import annotations
 
@@ -63,15 +63,16 @@ class Block(nn.Module):
                                 nn.Linear(ff_mult * d, d))
         self.drop = nn.Dropout(drop)
 
-    def forward(self, x, bias, key_mask):
+    def forward(self, x, bias, key_mask, need_attn: bool = False):
         B, L, D = x.shape
         qkv = self.qkv(self.ln1(x)).view(B, L, 3, self.h, self.dk).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]                                  # [B,H,L,dk]
         att = (q @ k.transpose(-2, -1)) / math.sqrt(self.dk) + bias      # [B,H,L,L]
-        att = att.masked_fill(~key_mask[:, None, None, :], float("-inf"))
-        a = self.drop(att.softmax(dim=-1)) @ v                            # [B,H,L,dk]
+        att = att.masked_fill(~key_mask[:, None, None, :], float("-inf")).softmax(dim=-1)
+        a = self.drop(att) @ v                                            # [B,H,L,dk]
         x = x + self.drop(self.out(a.transpose(1, 2).reshape(B, L, D)))
-        return x + self.drop(self.ff(self.ln2(x)))
+        x = x + self.drop(self.ff(self.ln2(x)))
+        return (x, att) if need_attn else x
 
 
 def mlp(i, d):
@@ -80,30 +81,35 @@ def mlp(i, d):
 
 class LoopPitch(nn.Module):
     """
-    tied=True,  loops=T  -> looped (weight-tied) transformer: 1 block applied T times
-    tied=False, loops=T  -> standard T-layer transformer (ablation baseline)
+    tied=True,  loops=T  -> looped (weight-tied) transformer: 1 block applied T times   (M5)
+    tied=False, loops=T  -> standard T-layer transformer (ablation baseline)            (M4)
     loops=1              -> single-layer set transformer (ablation baseline)
     inject=True          -> input injection: h_{t+1} = Block(h_t + e) for t >= 1
+    geo=False            -> no geometric attention bias (ablation)
+    halt=True            -> PonderNet-style halting head, adds logits[..., 2]           (M6)
     """
 
     def __init__(self, f_player: int, f_query: int, f_ctx: int, d: int = 64, heads: int = 4,
-                 loops: int = 4, tied: bool = True, inject: bool = True, drop: float = 0.1):
+                 loops: int = 4, tied: bool = True, inject: bool = True, geo: bool = True,
+                 halt: bool = False, drop: float = 0.1):
         super().__init__()
-        self.loops, self.tied, self.inject = loops, tied, inject
+        self.loops, self.tied, self.inject, self.use_geo, self.halt = loops, tied, inject, geo, halt
+        self.heads = heads
         self.emb_p, self.emb_q, self.emb_c = mlp(f_player, d), mlp(f_query, d), mlp(f_ctx, d)
         self.type_emb = nn.Embedding(3, d)                    # 0 ctx, 1 query, 2 player
         self.blocks = nn.ModuleList([Block(d, heads, drop=drop) for _ in range(1 if tied else loops)])
-        self.geo = GeoBias(heads)
-        self.head = nn.Sequential(nn.LayerNorm(d), nn.Linear(d, 2))  # shared across loops
+        self.geo = GeoBias(heads) if geo else None
+        self.head = nn.Sequential(nn.LayerNorm(d), nn.Linear(d, 3 if halt else 2))  # shared across loops
 
-    def forward(self, P, ppos, pteam, pmask, Q, qpos, C, n_loops: int | None = None):
+    def forward(self, P, ppos, pteam, pmask, Q, qpos, C, n_loops: int | None = None, return_aux: bool = False):
         """
         P [B,N,f_player] player features   ppos [B,N,2] raw coords
         pteam [B,N] 1=teammate 0=opponent  pmask [B,N] bool (True = real player)
         Q [B,f_query] target features      qpos [B,2] raw target coords
         C [B,f_ctx] context features
         n_loops: override T at test time (tied models only) for depth extrapolation
-        returns logits [B,T,2]
+        return_aux: also return {"hidden": [T x [B,L,d]], "attn": [T x [B,H,L,L]]}
+        returns logits [B,T,2] (or [B,T,3] with halting)
         """
         T = n_loops or self.loops
         if not self.tied and T != self.loops:
@@ -116,41 +122,89 @@ class LoopPitch(nn.Module):
         ], dim=1)                                                         # [B,L,d]
         ones = torch.ones(B, 2, dtype=torch.bool, device=dev)
         key_mask = torch.cat([ones, pmask], dim=1)                        # [B,L]
-        has_pos = key_mask.clone()
-        has_pos[:, 0] = False                                             # context token has no position
-        pos = torch.cat([torch.zeros(B, 1, 2, device=dev), qpos[:, None], ppos], dim=1)
-        team = torch.cat([torch.full((B, 1), -1.0, device=dev),          # context
-                          torch.ones(B, 1, device=dev),                   # target belongs to own team
-                          pteam.float()], dim=1)
-        bias = self.geo(pos, team, has_pos)
+        L = key_mask.size(1)
+        if self.use_geo:
+            has_pos = key_mask.clone()
+            has_pos[:, 0] = False                                         # context token has no position
+            pos = torch.cat([torch.zeros(B, 1, 2, device=dev), qpos[:, None], ppos], dim=1)
+            team = torch.cat([torch.full((B, 1), -1.0, device=dev),      # context
+                              torch.ones(B, 1, device=dev),               # target belongs to own team
+                              pteam.float()], dim=1)
+            bias = self.geo(pos, team, has_pos)
+        else:
+            bias = torch.zeros(B, self.heads, L, L, device=dev)
 
-        h, outs = e, []
+        h, outs, hidden, attn = e, [], [], []
         for t in range(T):
             blk = self.blocks[0] if self.tied else self.blocks[t]
-            h = blk(h + e if (self.inject and t > 0) else h, bias, key_mask)
+            x = h + e if (self.inject and t > 0) else h
+            if return_aux:
+                h, a = blk(x, bias, key_mask, need_attn=True)
+                hidden.append(h); attn.append(a)
+            else:
+                h = blk(x, bias, key_mask)
             outs.append(self.head(h[:, 1]))                               # read out the query token
-        return torch.stack(outs, dim=1)
+        logits = torch.stack(outs, dim=1)
+        return (logits, {"hidden": hidden, "attn": attn}) if return_aux else logits
 
 
-def loop_weights(T: int, device=None):
-    """Deep-supervision weights: later loops count more (linearly), sum to 1."""
+def loop_weights(T: int, device=None, deep_sup: bool = True):
+    """Deep-supervision weights: later loops count more (linearly), sum to 1. deep_sup=False -> last loop only."""
+    if not deep_sup:
+        w = torch.zeros(T, device=device); w[-1] = 1.0
+        return w
     w = torch.arange(1, T + 1, dtype=torch.float, device=device)
     return w / w.sum()
 
 
-def loss_fn(logits, y_succ, y_shot):
-    """Success loss on all passes; shot loss only on completed passes. Deep-supervised over loops."""
+def halting_dist(halt_logits):
+    """PonderNet: p_t = lambda_t * prod_{s<t}(1 - lambda_s), with lambda_T forced to 1. [B,T] -> [B,T]."""
+    lam = torch.sigmoid(halt_logits)
+    lam = torch.cat([lam[:, :-1], torch.ones_like(lam[:, -1:])], dim=1)
+    survive = torch.cumprod(torch.cat([torch.ones_like(lam[:, :1]), 1 - lam[:, :-1]], dim=1), dim=1)
+    return lam * survive
+
+
+def _per_loop_bce(logits, y_succ, y_shot):
+    """[B,T] success BCE on all passes and [B,T] shot BCE (zeros where not completed) + completed mask."""
+    lp, lq = logits[..., 0], logits[..., 1]
+    Ls = F.binary_cross_entropy_with_logits(lp, y_succ[:, None].expand_as(lp), reduction="none")
+    Lq = F.binary_cross_entropy_with_logits(lq, y_shot[:, None].expand_as(lq), reduction="none")
+    m = (y_succ > 0.5).float()[:, None]
+    return Ls, Lq * m, m
+
+
+def loss_fn(logits, y_succ, y_shot, deep_sup: bool = True, halt_beta: float = 0.01, halt_prior: float = 0.3):
+    """Success loss on all passes; shot loss only on completed passes.
+
+    Without halting: deep-supervised over loops with weights loop_weights(T).
+    With halting (logits[..., 2]): expected loss under the halting distribution + beta * KL(p || Geometric(prior)).
+    """
     T = logits.size(1)
-    w = loop_weights(T, logits.device)
-    lp, lq = logits[..., 0], logits[..., 1]                               # [B,T]
-    Ls = F.binary_cross_entropy_with_logits(lp, y_succ[:, None].expand_as(lp), reduction="none").mean(0)
-    m = y_succ > 0.5
-    if m.any():
-        Lq = F.binary_cross_entropy_with_logits(lq[m], y_shot[m][:, None].expand_as(lq[m]),
-                                                reduction="none").mean(0)
-    else:
-        Lq = torch.zeros_like(Ls)
-    return ((Ls + Lq) * w).sum()
+    Ls, Lq, m = _per_loop_bce(logits, y_succ, y_shot)
+    n_comp = m.sum().clamp(min=1.0)
+    if logits.size(-1) == 2:
+        w = loop_weights(T, logits.device, deep_sup)
+        return (Ls.mean(0) * w).sum() + (Lq.sum(0) / n_comp * w).sum()
+    p = halting_dist(logits[..., 2])                                      # [B,T]
+    task = (p * Ls).sum(1).mean() + (p * Lq).sum() / n_comp
+    k = torch.arange(T, device=logits.device, dtype=torch.float)
+    prior = halt_prior * (1 - halt_prior) ** k
+    prior = prior / prior.sum()
+    kl = (p * (torch.log(p + 1e-9) - torch.log(prior))).sum(1).mean()
+    return task + halt_beta * kl
+
+
+def predict_probs(logits):
+    """[B,T,2|3] logits -> [B,T,2] per-loop probabilities, and [B,2] final prediction.
+
+    Final = last loop, or for halting models the expectation under the halting distribution.
+    """
+    pr = torch.sigmoid(logits[..., :2])
+    if logits.size(-1) == 3:
+        p = halting_dist(logits[..., 2])
+        return pr, (p[..., None] * pr).sum(1)
+    return pr, pr[:, -1]
 
 
 if __name__ == "__main__":  # smoke test with random tensors
@@ -162,11 +216,13 @@ if __name__ == "__main__":  # smoke test with random tensors
     pteam = torch.randint(0, 2, (B, N))
     pmask = torch.arange(N)[None] < torch.randint(6, N + 1, (B, 1))
     y_s, y_q = torch.randint(0, 2, (B,)).float(), torch.randint(0, 2, (B,)).float()
-    for tied, T in [(True, 4), (False, 4), (True, 1)]:
-        m = LoopPitch(FP, FQ, FC, loops=T, tied=tied)
+    for kw in [dict(tied=True, loops=4), dict(tied=False, loops=4), dict(tied=True, loops=1),
+               dict(tied=True, loops=4, geo=False), dict(tied=True, loops=4, halt=True)]:
+        m = LoopPitch(FP, FQ, FC, **kw)
         out = m(P, ppos, pteam, pmask, Q, qpos, C)
         loss = loss_fn(out, y_s, y_q); loss.backward()
         n = sum(p.numel() for p in m.parameters())
-        print(f"tied={tied} T={T} out={tuple(out.shape)} loss={loss.item():.4f} params={n:,}")
+        print(f"{kw} out={tuple(out.shape)} loss={loss.item():.4f} params={n:,}")
     m = LoopPitch(FP, FQ, FC, loops=4, tied=True).eval()
-    print("test-time 8 loops:", tuple(m(P, ppos, pteam, pmask, Q, qpos, C, n_loops=8).shape))
+    out, aux = m(P, ppos, pteam, pmask, Q, qpos, C, n_loops=8, return_aux=True)
+    print("test-time 8 loops:", tuple(out.shape), "attn", tuple(aux["attn"][0].shape))

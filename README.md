@@ -60,6 +60,7 @@ Smoke tests: `python looped_pitch_model.py`, `python models_deep.py`, `python cl
 | `calibrators.py`, `calibrate.py` | Isotonic (trees) / temperature (neural) fitted on OOF predictions only |
 | `evaluate.py` | Test metrics, ECE, match-bootstrap CIs, paired tests, reliability plots, per-loop analysis |
 | `optimize.py` | EV for every candidate, decision gap Δ, team/player tables, case-study pitch plots |
+| `analyze_loops.py` | Hidden-state convergence across loops (H3) and loop-wise attention maps on the pitch |
 | `configs/*.yaml` | One file per deep experiment (M2–M6, ablations) |
 | `run_all.sh` | End-to-end driver in priority order |
 | `quick_baselines.py/.csv` | The original untuned baselines (design doc §3) |
@@ -134,5 +135,5 @@ See [`RESULTS.md`](RESULTS.md); it is regenerated from `results/metrics.csv` aft
 - [x] Deep track M2–M6 + ablation configs
 - [x] Calibration, evaluation with bootstrap CIs, per-loop analysis
 - [x] Optimizer + case studies
-- [ ] Attention-map figures (loop-wise attention from the QUERY token; `LoopPitch(..., return_aux=True)` already returns them)
+- [x] Loop convergence (H3) and loop-wise attention maps: `analyze_loops.py`
 - [ ] B4 un-xPass, B5 SoccerMap

@@ -1,0 +1,7 @@
+# M6 LoopPitch + PonderNet halting (stretch)
+model: loop_halt
+name: M6_halt_T8
+loops: 8
+halt_beta: 0.01
+halt_prior: 0.3
+seeds: [0, 1, 2]

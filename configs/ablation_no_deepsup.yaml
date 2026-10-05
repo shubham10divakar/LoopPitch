@@ -1,0 +1,6 @@
+# Ablation: supervise the final loop only
+model: loop
+name: A_no_deepsup
+loops: 4
+deep_sup: false
+seeds: [0, 1, 2]

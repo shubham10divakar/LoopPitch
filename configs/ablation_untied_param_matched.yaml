@@ -1,0 +1,6 @@
+# Ablation: untied 4-layer transformer at roughly equal parameters to M5 (d=36)
+model: tf
+name: A_untied_d36
+loops: 4
+d: 36
+seeds: [0, 1, 2]

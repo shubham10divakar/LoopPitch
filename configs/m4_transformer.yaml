@@ -1,0 +1,5 @@
+# M4 untied 4-layer transformer: the direct control for LoopPitch (P1, H1)
+model: tf
+name: M4_T4
+loops: 4
+seeds: [0, 1, 2, 3, 4]

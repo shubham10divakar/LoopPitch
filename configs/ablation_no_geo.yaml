@@ -1,0 +1,6 @@
+# Ablation: no geometric attention bias
+model: loop
+name: A_no_geo
+loops: 4
+geo: false
+seeds: [0, 1, 2]

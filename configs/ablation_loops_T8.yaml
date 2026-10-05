@@ -1,0 +1,6 @@
+# Ablation: number of loops T = 8 (tied)
+model: loop
+name: A_loop_T8
+loops: 8
+eval_loops: 8
+seeds: [0, 1, 2]

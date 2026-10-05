@@ -1,0 +1,6 @@
+# M5 LoopPitch: one weight-tied block x 4 loops (P1, H1-H4)
+model: loop
+name: M5_T4
+loops: 4
+eval_loops: 8   # also evaluated at loops 5..8 for depth extrapolation (H3)
+seeds: [0, 1, 2, 3, 4]

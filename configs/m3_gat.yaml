@@ -1,0 +1,4 @@
+# M3 GATv2, 2 layers, k-NN (k=6) + query edges (P3)
+model: gat
+name: M3_GAT
+seeds: [0, 1, 2]

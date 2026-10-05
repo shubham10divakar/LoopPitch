@@ -1,0 +1,4 @@
+# M2 DeepSets (P3)
+model: deepsets
+name: M2_DeepSets
+seeds: [0, 1, 2]

@@ -1,0 +1,6 @@
+# Ablation: no mirror augmentation
+model: loop
+name: A_no_mirror
+loops: 4
+mirror: false
+seeds: [0, 1, 2]

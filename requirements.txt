@@ -1,0 +1,12 @@
+numpy
+pandas
+pyarrow
+shapely          # visible-area polygon in clean_pipeline.py
+scikit-learn
+scipy
+xgboost>=2.0
+optuna
+torch>=2.1       # CUDA build recommended for train_deep.py
+pyyaml
+matplotlib
+joblib

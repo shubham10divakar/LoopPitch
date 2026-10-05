@@ -1,0 +1,6 @@
+# Ablation: no input injection
+model: loop
+name: A_no_inject
+loops: 4
+inject: false
+seeds: [0, 1, 2]

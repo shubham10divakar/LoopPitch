@@ -128,6 +128,23 @@ than the actor and keeper. That gives 1,057,548 candidates, about 6.5 teammates 
 
 See [`RESULTS.md`](RESULTS.md); it is regenerated from `results/metrics.csv` after each full run.
 
+### Interim: first full M5 run (2026-10-06)
+
+M5_T4 (`configs/m5_looppitch.yaml`, 65,546 parameters, 5 seeds) against the best tabular baseline.
+These are raw seed-averaged probabilities from `results/preds/`, with no calibration and no CIs yet.
+The numbers in `RESULTS.md` replace these once `evaluate.py` has been run.
+
+| Task | Model | Test log-loss | Test Brier | Test AUC | OOF log-loss |
+|---|---|---|---|---|---|
+| success | **M5_T4** | **0.2149** | **0.0667** | **0.9455** | **0.1958** |
+| success | B2_FULL | 0.2193 | 0.0674 | 0.9419 | 0.1970 |
+| shot10 | **M5_T4** | **0.1240** | **0.0334** | **0.9042** | **0.1367** |
+| shot10 | B2_FULL | 0.1251 | 0.0335 | 0.9012 | 0.1378 |
+
+M5 leads on both tasks. The lead is clear on success and small on shot10, which may not hold up under the match bootstrap.
+Early stopping triggered at epochs 46–70. Final validation loss was about 0.31 on fold 0 and 0.34–0.35 on folds 1–4.
+M4 (needed for H1) has not been run yet.
+
 ## Status
 
 - [x] Data pipeline, pulled and verified (counts match `qa_report.json`)

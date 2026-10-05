@@ -1,0 +1,15 @@
+# data (re-create with: python clean_pipeline.py --out data)
+data/
+*.parquet
+*.npz
+*.pt
+
+# outputs
+results/
+*.log
+
+# python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/

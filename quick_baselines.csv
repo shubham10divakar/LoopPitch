@@ -1,0 +1,9 @@
+task,model,logloss,brier,auc,prauc
+pass_success,B0 prior,0.4507,0.1388,0.5,0.8338
+pass_success,B1 logistic,0.2624,0.0813,0.9174,0.9814
+pass_success,B3 XGB location-only,0.2947,0.09,0.8819,0.9705
+pass_success,B2 XGB all features,0.2208,0.0678,0.9411,0.9873
+shot10|completed,B0 prior,0.1899,0.0448,0.5,0.047
+shot10|completed,B1 logistic,0.1266,0.0338,0.8973,0.4359
+shot10|completed,B3 XGB location-only,0.1302,0.0343,0.8867,0.424
+shot10|completed,B2 XGB all features,0.1277,0.0341,0.8959,0.43

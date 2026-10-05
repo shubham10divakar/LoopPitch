@@ -1,0 +1,25 @@
+{
+  "n_passes": 141176,
+  "n_frame_rows": 2194814,
+  "pass_success_rate": 0.8435,
+  "shot10_rate_completed": 0.0504,
+  "per_split": {
+    "n": {
+      "test": 53837,
+      "train": 87339
+    },
+    "success": {
+      "test": 0.8337,
+      "train": 0.8495
+    }
+  },
+  "orientation_qa": {
+    "actor_present": 141176,
+    "actor_mismatch_gt2": 34,
+    "teams_seen": 2
+  },
+  "missing_values": {
+    "nearest_opp_dist": 2,
+    "def_line_x": 2
+  }
+}

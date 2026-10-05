@@ -101,7 +101,11 @@ def tune_xgb(X, y, folds, trials: int, seed: int = 0) -> dict:
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     study = optuna.create_study(direction="minimize", sampler=optuna.samplers.TPESampler(seed=seed))
-    study.optimize(objective, n_trials=trials)
+    def progress(study, trial):
+        print(f"    trial {trial.number + 1}/{trials}: CV logloss {trial.value:.4f} "
+              f"(best {study.best_value:.4f}, {trial.duration.total_seconds():.0f}s)", flush=True)
+
+    study.optimize(objective, n_trials=trials, callbacks=[progress])
     best = dict(study.best_params, n_estimators=study.best_trial.user_attrs["n_estimators"])
     print(f"    optuna best CV logloss {study.best_value:.4f} with {best}", flush=True)
     return best

@@ -90,7 +90,7 @@ results/
 | Tasks | `success` on all passes (84.4% positive); `shot10` on completed passes only (5.0% positive) |
 | Features | **DT** (decision-time): state + action + `play_pattern`, `pass_type`. **FULL** adds `body_part`, `pass_height` and is for prediction only, never the optimizer. **LOC**: the four coordinates. |
 | Tabular | OOF predictions from the 5 folds; final model refit on all of train. XGBoost is tuned with Optuna (grouped CV, early stopping), then refit at the mean best iteration. |
-| Deep | AdamW (lr 3e-4, wd 0.01), cosine schedule with 1-epoch warm-up, batch 512, ≤ 40 epochs, patience 5, grad-clip 1.0. CV early stopping, then refit at the mean best epoch. Several seeds, ensembled in logit space. |
+| Deep | AdamW (lr 1e-3, wd 0.01), cosine schedule with 1-epoch warm-up, batch 512, ≤ 80 epochs, patience 10, grad-clip 1.0. CV early stopping, then refit at the mean best epoch. Several seeds, ensembled in logit space. |
 | Augmentation | Vertical mirror y → 80 − y with p = 0.5; average of both views at test time |
 | Calibration | Fitted on OOF predictions only: isotonic for trees, temperature for neural / linear models |
 | Metrics | Log-loss (primary), Brier and BSS vs B0, ROC-AUC, PR-AUC, ECE (15 bins); 95% CIs from 1,000 bootstrap resamples **of matches**; paired bootstrap for model differences |
@@ -114,6 +114,7 @@ than the actor and keeper. That gives 1,057,548 candidates, about 6.5 teammates 
 ## Implementation notes and deviations from the design doc
 
 - `pass_type` (Open Play / Recovery / Interception) is part of the context token and the DT set. It is known at decision time.
+- **Training schedule (deviation):** the design doc's lr 3e-4 / 40 epochs / patience 5 left M5 undertrained (validation loss still falling at epoch 40 on every fold). On fold 0 of the training CV, lr 1e-3 / 80 epochs cut the validation loss from 0.346 to 0.316. Patience 10 because the validation loss is noisy (about ±0.003). Applied to all deep models alike; chosen on training folds only.
 - **Early stopping:** the validation loss is the final-loop log-loss for success plus shot10 (shot10 on completed passes only).
 - **Depth extrapolation (H3):** tied models are always run to `max(T, eval_loops=8)` loops, and the logits of every loop are saved. Loop t of that run is exactly the model run at depth t, so H2 and H3 need no extra inference.
 - **M6 halting** is PonderNet-style: λ_T is forced to 1, the loss is the expected loss under the halting distribution + β·KL to a truncated geometric prior, and the prediction is the expected probability.

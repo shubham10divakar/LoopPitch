@@ -44,7 +44,7 @@ DEV = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 KEYS = ["P", "ppos", "pteam", "pmask", "Q", "qpos", "C"]
 
 DEFAULTS = dict(model="loop", name=None, d=64, heads=4, loops=4, inject=True, geo=True, deep_sup=True,
-                mirror=True, drop=0.1, lr=3e-4, wd=0.01, bs=512, epochs=40, patience=5, clip=1.0,
+                mirror=True, drop=0.1, lr=1e-3, wd=0.01, bs=512, epochs=80, patience=10, clip=1.0,
                 seeds=[0], eval_loops=8, halt_beta=0.01, halt_prior=0.3, fast=False)
 
 

@@ -31,3 +31,5 @@ python calibrate.py
 python evaluate.py
 python optimize.py --p-model B2_DT --q-model B1_DT
 python optimize.py --p-model M5_T4 --q-model M5_T4 --split all --case-player "Lamine Yamal"
+python analyze_loops.py --run M5_T4
+python make_results.py

@@ -10,3 +10,4 @@ torch>=2.1       # CUDA build recommended for train_deep.py
 pyyaml
 matplotlib
 joblib
+tabulate         # DataFrame.to_markdown in make_results.py

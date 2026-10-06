@@ -128,22 +128,26 @@ than the actor and keeper. That gives 1,057,548 candidates, about 6.5 teammates 
 
 See [`RESULTS.md`](RESULTS.md); it is regenerated from `results/metrics.csv` after each full run.
 
-### Interim: first full M5 run (2026-10-06)
+### M5 vs tabular baselines (2026-10-06, calibrated, 95% match-bootstrap CIs)
 
-M5_T4 (`configs/m5_looppitch.yaml`, 65,546 parameters, 5 seeds) against the best tabular baseline.
-These are raw seed-averaged probabilities from `results/preds/`, with no calibration and no CIs yet.
-The numbers in `RESULTS.md` replace these once `evaluate.py` has been run.
+M5_T4 (`configs/m5_looppitch.yaml`, 65,546 parameters, 5 seeds), test = WC 2022. Full tables are in `RESULTS.md`.
 
-| Task | Model | Test log-loss | Test Brier | Test AUC | OOF log-loss |
+| Task | Model | Log-loss [95% CI] | Brier | ROC-AUC | ECE |
 |---|---|---|---|---|---|
-| success | **M5_T4** | **0.2149** | **0.0667** | **0.9455** | **0.1958** |
-| success | B2_FULL | 0.2193 | 0.0674 | 0.9419 | 0.1970 |
-| shot10 | **M5_T4** | **0.1240** | **0.0334** | **0.9042** | **0.1367** |
-| shot10 | B2_FULL | 0.1251 | 0.0335 | 0.9012 | 0.1378 |
+| success | **M5_T4** | **0.2146** [0.2042, 0.2249] | **0.0666** | **0.946** | 0.0101 |
+| success | B2_FULL | 0.2191 [0.2087, 0.2297] | 0.0674 | 0.942 | 0.0083 |
+| shot10 | **M5_T4** | **0.1241** [0.1158, 0.1337] | **0.0334** | **0.904** | 0.0032 |
+| shot10 | B2_FULL | 0.1251 [0.1167, 0.1350] | 0.0336 | 0.901 | 0.0027 |
 
-M5 leads on both tasks. The lead is clear on success and small on shot10, which may not hold up under the match bootstrap.
-Early stopping triggered at epochs 46–70. Final validation loss was about 0.31 on fold 0 and 0.34–0.35 on folds 1–4.
-M4 (needed for H1) has not been run yet.
+Paired match bootstrap, M5_T4 − B2_FULL log-loss: success −0.0045 [−0.0074, −0.0018], shot10 −0.0011 [−0.0020, −0.0002].
+Both intervals exclude 0, so M5 beats the strongest tabular baseline on both tasks. The shot10 margin is small.
+
+- **Loops (H2/H3):** success log-loss improves from 0.2221 at loop 1 to 0.2149 at loop 4, then stays flat out to loop 8 (no degradation when extrapolating depth).
+  The loop 1→4 gain grows with congestion: 0.0033 with no opponent within 5 m, 0.0091 with one, 0.0121 with two or more.
+- **Convergence:** the relative change of the token states falls from 1.04 at loop 2 to 0.095 at loop 12. It decays steadily but is not yet at a fixed point.
+- **Calibration:** temperature T = 1.017 on both tasks, so M5 was already close to calibrated.
+
+M4 (the untied control for H1) has not been run yet. Once it has, rerun `calibrate.py`, `evaluate.py` and `make_results.py`.
 
 ## Status
 

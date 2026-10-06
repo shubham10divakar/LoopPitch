@@ -4,7 +4,8 @@ Evaluation on the WC 2022 test split (design doc Section 7).
   metrics.csv        per model x task: log-loss, Brier, BSS vs B0, ROC-AUC, PR-AUC, ECE (raw and
                      calibrated), with 95% CIs from a bootstrap over MATCHES
   paired.csv         paired match-bootstrap of the log-loss difference vs a reference model
-                     (default B2_DT), plus the H1 comparison M5 vs M4 when both exist
+                     (default B2_DT), plus M5 vs B2_FULL and the H1 comparison M5 vs M4 when
+                     they exist
   loops.csv          per-loop test log-loss for looped/untied runs (H2, H3), overall and stratified
                      by congestion (opp_within_5) and pitch third
   figures/           reliability diagrams per task, per-loop curves
@@ -107,8 +108,9 @@ def evaluate_models(table, n_boot, reference):
             p = np.clip(d.p_cal.values, 1e-6, 1 - 1e-6)
             return -(y * np.log(p) + (1 - y) * np.log(1 - p))
         pairs = [(n, reference) for n in aligned if n != reference and reference in aligned]
-        if "M5_T4" in aligned and "M4_T4" in aligned:
-            pairs.append(("M5_T4", "M4_T4"))
+        for b in ["B2_FULL", "M4_T4"]:  # strongest tabular baseline; H1 control
+            if "M5_T4" in aligned and b in aligned and b != reference:
+                pairs.append(("M5_T4", b))
         for a, b in pairs:
             diff = ll(aligned[a]) - ll(aligned[b])
             bd = (W @ diff) / W.sum(1)
